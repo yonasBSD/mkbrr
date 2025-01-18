@@ -94,6 +94,7 @@ func init() {
 }
 
 func runCreate(cmd *cobra.Command, args []string) error {
+	startTime := time.Now()
 	path := args[0]
 
 	// use custom name or default to basename
@@ -202,6 +203,10 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	// generate and display magnet link
 	magnet, _ := mi.MagnetV2()
 	fmt.Printf("Magnet Link: %s\n", magnet)
+
+	// print elapsed time
+	elapsed := time.Since(startTime)
+	fmt.Printf("Duration: %s\n", elapsed.Round(time.Millisecond))
 
 	return nil
 }
