@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -251,43 +252,59 @@ func (h *pieceHasher) hashPieceRange(startPiece, endPiece int, completedPieces *
 	defer h.bufferPool.Put(buf)
 
 	// pre-allocate hash buffer and reuse it
-	hashBuf := make([]byte, 20)
 	hasher := sha1.New()
 
 	// maintain file readers with current positions
-	readers := make(map[string]*fileReader, len(h.files))
+	readers := make(map[string]*fileReader)
 	defer func() {
 		for _, r := range readers {
 			r.file.Close()
 		}
 	}()
 
-	// adjust batch size based on number of files
-	progressBatchSize := 50
-	if len(h.files) > 10 { // many small files
-		progressBatchSize = 10 // update progress more frequently
-	}
-	batchedProgress := 0
-
-	// process pieces sequentially to maximize read locality
 	for pieceIndex := startPiece; pieceIndex < endPiece; pieceIndex++ {
-		offset := int64(pieceIndex) * h.pieceLen
-		remainingPiece := h.pieceLen
+		pieceOffset := int64(pieceIndex) * h.pieceLen
+		pieceLength := h.pieceLen
 
+		// adjust length for last piece
 		if pieceIndex == h.numPieces-1 {
 			var totalLength int64
 			for _, f := range h.files {
 				totalLength += f.length
 			}
-			remainingPiece = totalLength - offset
+			remaining := totalLength - pieceOffset
+			if remaining < pieceLength {
+				pieceLength = remaining
+			}
 		}
 
-		// read sequentially from files
+		hasher.Reset()
+		remainingPiece := pieceLength
+
+		// read piece data from files
 		for _, file := range h.files {
-			if offset >= file.offset+file.length {
+			// skip files before piece offset
+			if pieceOffset >= file.offset+file.length {
 				continue
 			}
+			// stop if we've read the full piece
+			if remainingPiece <= 0 {
+				break
+			}
 
+			// calculate file read position
+			readStart := pieceOffset - file.offset
+			if readStart < 0 {
+				readStart = 0
+			}
+
+			// calculate how much to read from this file
+			readLength := file.length - readStart
+			if readLength > remainingPiece {
+				readLength = remainingPiece
+			}
+
+			// get or create file reader
 			reader, ok := readers[file.path]
 			if !ok {
 				f, err := os.OpenFile(file.path, os.O_RDONLY, 0)
@@ -302,64 +319,38 @@ func (h *pieceHasher) hashPieceRange(startPiece, endPiece int, completedPieces *
 				readers[file.path] = reader
 			}
 
-			// calculate read position
-			readOffset := offset - file.offset
-			if readOffset > 0 && reader.position != readOffset {
-				if _, err := reader.file.Seek(readOffset, 0); err != nil {
+			// seek to correct position if needed
+			if reader.position != readStart {
+				if _, err := reader.file.Seek(readStart, 0); err != nil {
 					return fmt.Errorf("failed to seek in file %s: %w", file.path, err)
 				}
-				reader.position = readOffset
+				reader.position = readStart
 			}
 
-			toRead := file.length - readOffset
-			if toRead > remainingPiece {
-				toRead = remainingPiece
-			}
-
-			// read in larger chunks
-			for toRead > 0 {
-				n := int(toRead)
+			// read file data in chunks
+			remaining := readLength
+			for remaining > 0 {
+				n := int(remaining)
 				if n > len(buf) {
 					n = len(buf)
 				}
 
 				read, err := io.ReadFull(reader.file, buf[:n])
-				if err != nil {
-					if err == io.ErrUnexpectedEOF {
-						// handle partial reads
-						if read > 0 {
-							hasher.Write(buf[:read])
-							toRead -= int64(read)
-							remainingPiece -= int64(read)
-							reader.position += int64(read)
-							continue
-						}
-					}
-					return fmt.Errorf("failed to read file %s at offset %d: %w", file.path, reader.position, err)
+				if err != nil && err != io.ErrUnexpectedEOF {
+					return fmt.Errorf("failed to read file %s: %w", file.path, err)
 				}
 
 				hasher.Write(buf[:read])
-				toRead -= int64(read)
+				remaining -= int64(read)
 				remainingPiece -= int64(read)
 				reader.position += int64(read)
-			}
-
-			if remainingPiece <= 0 {
-				break
+				pieceOffset += int64(read)
 			}
 		}
 
-		h.pieces[pieceIndex] = hasher.Sum(hashBuf[:0])
-
-		batchedProgress++
-		if batchedProgress >= progressBatchSize {
-			atomic.AddUint64(completedPieces, uint64(batchedProgress))
-			batchedProgress = 0
-		}
-	}
-
-	if batchedProgress > 0 {
-		atomic.AddUint64(completedPieces, uint64(batchedProgress))
+		// store piece hash
+		h.pieces[pieceIndex] = hasher.Sum(nil)
+		atomic.AddUint64(completedPieces, 1)
 	}
 
 	return nil
@@ -367,12 +358,57 @@ func (h *pieceHasher) hashPieceRange(startPiece, endPiece int, completedPieces *
 
 // buildInfoDict builds the info dictionary with parallel piece hashing
 func buildInfoDict(path string, name string, pieceLength int64) (*metainfo.Info, error) {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat path: %w", err)
+	}
+
+	// Initialize info with dynamic piece length instead of hardcoded value
+	info := &metainfo.Info{
+		PieceLength: pieceLength, // Remove hardcoded 262144 value
+	}
+
+	if !fileInfo.IsDir() {
+		// Single file mode
+		info.Name = filepath.Base(path)
+		info.Length = fileInfo.Size()
+		if isPrivate {
+			private := true
+			info.Private = &private
+		}
+
+		// Calculate pieces for single file
+		numPieces := (fileInfo.Size() + pieceLength - 1) / pieceLength
+		hasher := &pieceHasher{
+			pieces:    make([][]byte, numPieces),
+			pieceLen:  pieceLength,
+			numPieces: int(numPieces),
+			files: []fileEntry{{
+				path:   path,
+				length: fileInfo.Size(),
+				offset: 0,
+			}},
+		}
+
+		if err := hasher.hashPieces(runtime.NumCPU()); err != nil {
+			return nil, err
+		}
+
+		// Set pieces directly from hasher
+		info.Pieces = make([]byte, len(hasher.pieces)*20)
+		for i, piece := range hasher.pieces {
+			copy(info.Pieces[i*20:], piece)
+		}
+
+		return info, nil
+	}
+
 	// collect file information in a single pass
 	var files []fileEntry
 	var totalLength int64
 	var baseDir string
 
-	err := filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
+	err = filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -397,6 +433,11 @@ func buildInfoDict(path string, name string, pieceLength int64) (*metainfo.Info,
 		return nil, err
 	}
 
+	// Sort files by path to ensure consistent ordering
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].path < files[j].path
+	})
+
 	// calculate number of pieces
 	numPieces := (totalLength + pieceLength - 1) / pieceLength
 
@@ -415,15 +456,9 @@ func buildInfoDict(path string, name string, pieceLength int64) (*metainfo.Info,
 	}
 
 	// build info dictionary
-	info := &metainfo.Info{
+	info = &metainfo.Info{
 		Name:        name,
 		PieceLength: pieceLength,
-	}
-
-	// concatenate piece hashes
-	info.Pieces = make([]byte, 0, len(hasher.pieces)*20)
-	for _, piece := range hasher.pieces {
-		info.Pieces = append(info.Pieces, piece...)
 	}
 
 	// add files
@@ -433,7 +468,8 @@ func buildInfoDict(path string, name string, pieceLength int64) (*metainfo.Info,
 		info.Files = make([]metainfo.FileInfo, len(files))
 		for i, f := range files {
 			relPath, _ := filepath.Rel(baseDir, f.path)
-			pathComponents := strings.Split(relPath, string(filepath.Separator))
+			// Use forward slashes for path components regardless of OS
+			pathComponents := strings.Split(filepath.ToSlash(relPath), "/")
 			info.Files[i] = metainfo.FileInfo{
 				Path:   pathComponents,
 				Length: f.length,
@@ -519,10 +555,15 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	//startTime := time.Now()
 	path := args[0]
 
-	// use custom name or default to basename
-	name := torrentName
-	if name == "" {
-		name = filepath.Base(path)
+	// Normalize the input path to use forward slashes
+	path = filepath.ToSlash(path)
+
+	// Use clean paths for name derivation
+	var name string
+	if torrentName == "" {
+		name = filepath.Base(filepath.Clean(path))
+	} else {
+		name = torrentName
 	}
 
 	// use custom output path or default to name.torrent
@@ -611,6 +652,11 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		PieceLength: pieceLenInt,
 		Private:     &isPrivate,
 	}
+
+	// Sort files to ensure consistent ordering
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].path < files[j].path
+	})
 
 	if source != "" {
 		info.Source = source

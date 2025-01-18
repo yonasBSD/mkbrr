@@ -24,7 +24,7 @@ Duration: 1.35s user 0.49s system 103% cpu 1.780 total
 
 # mkbrr
 time mkbrr create episode.mkv -p -v -t https://tracker.com/announce
-Duration: 1.26s user 0.46s system 97% cpu 1.760 total
+Duration: 1.26s user 0.45s system 96% cpu 1.762 total
 ```
 
 ### Small Directory (350MB Music Album)
@@ -36,7 +36,7 @@ Duration: 0.13s user 0.06s system 98% cpu 0.201 total
 
 # mkbrr
 time mkbrr create 'album/' -p -v -t https://tracker.com/announce
-Duration: 0.12s user 0.05s system 90% cpu 0.196 total
+Duration: 0.12s user 0.05s system 87% cpu 0.202 total
 ```
 
 ## Installation
