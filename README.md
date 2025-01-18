@@ -13,7 +13,7 @@ mkbrr is a command-line tool to create and inspect torrent files. Fast, single b
 
 ## Performance
 
-mkbrr is blazingly fast, matching or outperforming other popular torrent creation tools. Here are some benchmarks on Apple Silicon:
+mkbrr is blazingly fast, matching, and sometimes outperforming other popular torrent creation tools. Here are some benchmarks on Apple Silicon:
 
 ### Large File (3.59GB MKV)
 
@@ -24,7 +24,7 @@ Duration: 1.35s user 0.49s system 103% cpu 1.780 total
 
 # mkbrr
 time mkbrr create episode.mkv -p -v -t https://tracker.com/announce
-Duration: 1.26s user 0.45s system 96% cpu 1.762 total
+Duration: 1.25s user 0.44s system 99% cpu 1.697 total
 ```
 
 ### Small Directory (350MB Music Album)
@@ -36,7 +36,7 @@ Duration: 0.13s user 0.06s system 98% cpu 0.201 total
 
 # mkbrr
 time mkbrr create 'album/' -p -v -t https://tracker.com/announce
-Duration: 0.12s user 0.05s system 87% cpu 0.202 total
+Duration: 0.13s user 0.04s system 130% cpu 0.129 total
 ```
 
 ## Installation
