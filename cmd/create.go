@@ -494,16 +494,80 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("error writing torrent file: %w", err)
 	}
 
-	fmt.Printf("Created torrent: %s\n", out)
-	fmt.Printf("Info Hash: %s\n", mi.HashInfoBytes().String())
+	fmt.Printf("\nName: %s\n", info.Name)
+	fmt.Printf("Size: %s\n", humanize.Bytes(uint64(totalSize)))
+	fmt.Printf("Pieces: %d\n", len(info.Pieces)/20)
+	fmt.Printf("Piece Length: %s\n", humanize.Bytes(uint64(info.PieceLength)))
+	fmt.Printf("Private: %v\n", isPrivate)
+	fmt.Printf("\n")
+
+	fmt.Printf("Hash: %s\n", mi.HashInfoBytes().String())
+	fmt.Printf("Tracker: %s\n", trackerURL)
+
+	if len(webSeeds) > 0 {
+		fmt.Println("\nWeb Seeds:")
+		for _, seed := range webSeeds {
+			fmt.Printf("  - %s\n", seed)
+		}
+	}
+
+	// display creation info
+	fmt.Println()
+	fmt.Printf("Created by: %s\n", mi.CreatedBy)
+	if !noDate {
+		creationTime := time.Unix(mi.CreationDate, 0)
+		fmt.Printf("Created: %s\n", creationTime.Format(time.RFC1123))
+	}
+	if comment != "" {
+		fmt.Printf("Comment: %s\n", comment)
+	}
 
 	// generate and display magnet link
 	magnet, _ := mi.MagnetV2()
-	fmt.Printf("Magnet Link: %s\n", magnet)
+	fmt.Printf("\nMagnet Link: %s\n", magnet)
 
-	// print elapsed time
-	//elapsed := time.Since(startTime)
-	//fmt.Printf("Duration: %s\n", elapsed.Round(time.Millisecond))
+	// display file information for multi-file torrents
+	if len(files) > 1 {
+		fmt.Printf("\nFiles  %s\n", info.Name)
+
+		// organize files by path components
+		filesByPath := make(map[string][]FileEntry)
+		for _, f := range files {
+			relPath, _ := filepath.Rel(baseDir, f.path)
+			dir := filepath.Dir(relPath)
+			if dir == "." {
+				dir = ""
+			}
+			filesByPath[dir] = append(filesByPath[dir], FileEntry{
+				name: filepath.Base(relPath),
+				size: f.length,
+				path: relPath,
+			})
+		}
+
+		// print files in tree structure
+		prefix := "       " // 7 spaces to align with "Files  "
+		for dir, files := range filesByPath {
+			if dir != "" {
+				fmt.Printf("%s├─%s\n", prefix, dir)
+				for i, file := range files {
+					if i == len(files)-1 {
+						fmt.Printf("%s│  └─%s [%s]\n", prefix, file.name, humanize.Bytes(uint64(file.size)))
+					} else {
+						fmt.Printf("%s│  ├─%s [%s]\n", prefix, file.name, humanize.Bytes(uint64(file.size)))
+					}
+				}
+			} else {
+				for i, file := range files {
+					if i == len(files)-1 {
+						fmt.Printf("%s└─%s [%s]\n", prefix, file.name, humanize.Bytes(uint64(file.size)))
+					} else {
+						fmt.Printf("%s├─%s [%s]\n", prefix, file.name, humanize.Bytes(uint64(file.size)))
+					}
+				}
+			}
+		}
+	}
 
 	return nil
 }
