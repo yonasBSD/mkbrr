@@ -9,7 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/pprof"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -31,7 +35,26 @@ var (
 	noDate         bool
 	source         string
 	verbose        bool
+
+	// file patterns to ignore (case insensitive)
+	ignoredPatterns = []string{
+		".torrent",    // torrent files
+		".ds_store",   // macOS system files
+		"thumbs.db",   // Windows thumbnail cache
+		"desktop.ini", // Windows folder settings
+	}
 )
+
+// shouldIgnoreFile checks if a file should be ignored based on predefined patterns
+func shouldIgnoreFile(path string) bool {
+	lowerPath := strings.ToLower(path)
+	for _, pattern := range ignoredPatterns {
+		if strings.HasSuffix(lowerPath, pattern) {
+			return true
+		}
+	}
+	return false
+}
 
 // calculatePieceLength calculates the optimal piece length based on total size
 // using the formula: 2^(log2(size)/2 + 4)
@@ -66,11 +89,18 @@ func calculatePieceLength(totalSize int64) uint {
 
 // pieceHasher handles parallel hashing of pieces
 type pieceHasher struct {
-	pieces    [][]byte
-	pieceLen  int64
-	numPieces int
-	files     []fileEntry
-	progress  *progressbar.ProgressBar
+	pieces     [][]byte
+	pieceLen   int64
+	numPieces  int
+	files      []fileEntry
+	progress   *progressbar.ProgressBar
+	bufferPool *sync.Pool
+	readSize   int
+}
+
+// helper function to set read buffer size
+func setReadBuffer(f *os.File, size int) error {
+	return syscall.SetsockoptInt(int(f.Fd()), syscall.SOL_SOCKET, syscall.SO_RCVBUF, size)
 }
 
 type fileEntry struct {
@@ -79,14 +109,85 @@ type fileEntry struct {
 	offset int64
 }
 
+// maintain open files with current positions
+type fileReader struct {
+	file     *os.File
+	position int64
+	length   int64
+}
+
+// optimize buffer and worker count based on workload characteristics
+func (h *pieceHasher) optimizeForWorkload() (int, int) {
+	var totalSize int64
+	maxFileSize := int64(0)
+	for _, f := range h.files {
+		totalSize += f.length
+		if f.length > maxFileSize {
+			maxFileSize = f.length
+		}
+	}
+	avgFileSize := totalSize / int64(len(h.files))
+
+	// determine optimal read size and worker count
+	var readSize, numWorkers int
+
+	switch {
+	case len(h.files) == 1:
+		// single file optimization
+		if totalSize < 1<<20 { // < 1MB
+			readSize = 64 << 10 // 64KB
+			numWorkers = 1
+		} else if totalSize < 1<<30 { // < 1GB
+			readSize = 1 << 20 // 1MB
+			numWorkers = 2
+		} else {
+			readSize = 4 << 20 // 4MB
+			numWorkers = 4
+		}
+	case avgFileSize < 1<<20: // small files (< 1MB avg)
+		readSize = 256 << 10 // 256KB
+		numWorkers = min(8, runtime.NumCPU())
+	case avgFileSize < 10<<20: // medium files (< 10MB avg)
+		readSize = 1 << 20 // 1MB
+		numWorkers = min(4, runtime.NumCPU())
+	default: // large files
+		readSize = 4 << 20 // 4MB
+		numWorkers = min(2, runtime.NumCPU())
+	}
+
+	// adjust workers based on piece count
+	if numWorkers > h.numPieces {
+		numWorkers = h.numPieces
+	}
+
+	return readSize, numWorkers
+}
+
 // hashPieces reads and hashes file pieces in parallel
 func (h *pieceHasher) hashPieces(numWorkers int) error {
+	// optimize read size and worker count
+	h.readSize, numWorkers = h.optimizeForWorkload()
+
+	// initialize buffer pool with optimized buffer size
+	h.bufferPool = &sync.Pool{
+		New: func() interface{} {
+			return make([]byte, h.readSize)
+		},
+	}
+
+	// use atomic counter for progress
+	var completedPieces uint64
+
+	// optimize number of workers
+	if numWorkers > h.numPieces {
+		numWorkers = h.numPieces
+	}
+
 	// calculate pieces per worker
 	piecesPerWorker := (h.numPieces + numWorkers - 1) / numWorkers
 
-	// create error channel for workers
+	// create error channel
 	errors := make(chan error, numWorkers)
-	progressChan := make(chan int, numWorkers)
 
 	// create progress bar
 	h.progress = progressbar.NewOptions(h.numPieces,
@@ -96,23 +197,10 @@ func (h *pieceHasher) hashPieces(numWorkers int) error {
 		progressbar.OptionThrottle(65*time.Millisecond),
 		progressbar.OptionShowCount(),
 		progressbar.OptionShowIts(),
-		progressbar.OptionSetTheme(progressbar.Theme{
-			Saucer:        "=",
-			SaucerHead:    ">",
-			SaucerPadding: " ",
-			BarStart:      "[",
-			BarEnd:        "]",
-		}),
 	)
 
-	// start progress updater
-	go func() {
-		for n := range progressChan {
-			h.progress.Add(n)
-		}
-	}()
-
 	// start workers
+	var wg sync.WaitGroup
 	for i := 0; i < numWorkers; i++ {
 		start := i * piecesPerWorker
 		end := start + piecesPerWorker
@@ -120,52 +208,72 @@ func (h *pieceHasher) hashPieces(numWorkers int) error {
 			end = h.numPieces
 		}
 
+		wg.Add(1)
 		go func(startPiece, endPiece int) {
-			if err := h.hashPieceRange(startPiece, endPiece, progressChan); err != nil {
+			defer wg.Done()
+			if err := h.hashPieceRange(startPiece, endPiece, &completedPieces); err != nil {
 				errors <- err
-			} else {
-				errors <- nil
 			}
 		}(start, end)
 	}
 
-	// wait for all workers
-	var err error
-	for i := 0; i < numWorkers; i++ {
-		if e := <-errors; e != nil {
-			err = e
-		}
-	}
-
-	close(progressChan)
-	fmt.Println() // new line after progress bar
-	return err
-}
-
-// hashPieceRange hashes a range of pieces with efficient buffering
-func (h *pieceHasher) hashPieceRange(startPiece, endPiece int, progressChan chan<- int) error {
-	// use a larger buffer for reading
-	const bufferSize = 2 << 20 // 2MB buffer
-	buf := make([]byte, bufferSize)
-	// pre-allocate hash buffer with exact size
-	hashBuf := make([]byte, 20)
-
-	// maintain open files
-	openFiles := make(map[string]*os.File)
-	defer func() {
-		for _, f := range openFiles {
-			f.Close()
+	// start progress updater with reduced update frequency
+	go func() {
+		for {
+			completed := atomic.LoadUint64(&completedPieces)
+			if completed >= uint64(h.numPieces) {
+				break
+			}
+			h.progress.Set(int(completed))
+			time.Sleep(200 * time.Millisecond) // reduced update frequency
 		}
 	}()
 
-	completedPieces := 0
-	// process each piece in the range
+	// wait for completion
+	wg.Wait()
+	close(errors)
+
+	// check for errors
+	for err := range errors {
+		if err != nil {
+			return err
+		}
+	}
+
+	h.progress.Finish()
+	return nil
+}
+
+// hashPieceRange optimized for better sequential reads
+func (h *pieceHasher) hashPieceRange(startPiece, endPiece int, completedPieces *uint64) error {
+	// get buffer from pool
+	buf := h.bufferPool.Get().([]byte)
+	defer h.bufferPool.Put(buf)
+
+	// pre-allocate hash buffer and reuse it
+	hashBuf := make([]byte, 20)
+	hasher := sha1.New()
+
+	// maintain file readers with current positions
+	readers := make(map[string]*fileReader, len(h.files))
+	defer func() {
+		for _, r := range readers {
+			r.file.Close()
+		}
+	}()
+
+	// adjust batch size based on number of files
+	progressBatchSize := 50
+	if len(h.files) > 10 { // many small files
+		progressBatchSize = 10 // update progress more frequently
+	}
+	batchedProgress := 0
+
+	// process pieces sequentially to maximize read locality
 	for pieceIndex := startPiece; pieceIndex < endPiece; pieceIndex++ {
 		offset := int64(pieceIndex) * h.pieceLen
-		hasher := sha1.New()
 		remainingPiece := h.pieceLen
 
-		// adjust for last piece
 		if pieceIndex == h.numPieces-1 {
 			var totalLength int64
 			for _, f := range h.files {
@@ -174,60 +282,66 @@ func (h *pieceHasher) hashPieceRange(startPiece, endPiece int, progressChan chan
 			remainingPiece = totalLength - offset
 		}
 
-		// read from files that contain this piece
+		// read sequentially from files
 		for _, file := range h.files {
-			// skip files before the piece
 			if offset >= file.offset+file.length {
 				continue
 			}
 
-			// calculate file offsets
-			fileOffset := int64(0)
-			if offset > file.offset {
-				fileOffset = offset - file.offset
+			reader, ok := readers[file.path]
+			if !ok {
+				f, err := os.OpenFile(file.path, os.O_RDONLY, 0)
+				if err != nil {
+					return fmt.Errorf("failed to open file %s: %w", file.path, err)
+				}
+				reader = &fileReader{
+					file:     f,
+					position: 0,
+					length:   file.length,
+				}
+				readers[file.path] = reader
 			}
 
-			// calculate how much to read
-			toRead := file.length - fileOffset
+			// calculate read position
+			readOffset := offset - file.offset
+			if readOffset > 0 && reader.position != readOffset {
+				if _, err := reader.file.Seek(readOffset, 0); err != nil {
+					return fmt.Errorf("failed to seek in file %s: %w", file.path, err)
+				}
+				reader.position = readOffset
+			}
+
+			toRead := file.length - readOffset
 			if toRead > remainingPiece {
 				toRead = remainingPiece
 			}
 
-			if toRead <= 0 {
-				break
-			}
-
-			// get or open file
-			f, ok := openFiles[file.path]
-			if !ok {
-				var err error
-				f, err = os.Open(file.path)
-				if err != nil {
-					return err
-				}
-				openFiles[file.path] = f
-			}
-
-			// seek to correct position
-			if _, err := f.Seek(fileOffset, 0); err != nil {
-				return err
-			}
-
-			// read file data in chunks
+			// read in larger chunks
 			for toRead > 0 {
-				n := toRead
-				if n > bufferSize {
-					n = bufferSize
+				n := int(toRead)
+				if n > len(buf) {
+					n = len(buf)
 				}
 
-				read, err := io.ReadFull(f, buf[:n])
-				if err != nil && err != io.ErrUnexpectedEOF {
-					return err
+				read, err := io.ReadFull(reader.file, buf[:n])
+				if err != nil {
+					if err == io.ErrUnexpectedEOF {
+						// handle partial reads
+						if read > 0 {
+							hasher.Write(buf[:read])
+							toRead -= int64(read)
+							remainingPiece -= int64(read)
+							reader.position += int64(read)
+							continue
+						}
+					}
+					return fmt.Errorf("failed to read file %s at offset %d: %w", file.path, reader.position, err)
 				}
 
 				hasher.Write(buf[:read])
 				toRead -= int64(read)
 				remainingPiece -= int64(read)
+				reader.position += int64(read)
 			}
 
 			if remainingPiece <= 0 {
@@ -235,15 +349,17 @@ func (h *pieceHasher) hashPieceRange(startPiece, endPiece int, progressChan chan
 			}
 		}
 
-		// reuse hash buffer instead of allocating new one
 		h.pieces[pieceIndex] = hasher.Sum(hashBuf[:0])
-		completedPieces++
 
-		// update progress periodically
-		if completedPieces == 100 || pieceIndex == endPiece-1 {
-			progressChan <- completedPieces
-			completedPieces = 0
+		batchedProgress++
+		if batchedProgress >= progressBatchSize {
+			atomic.AddUint64(completedPieces, uint64(batchedProgress))
+			batchedProgress = 0
 		}
+	}
+
+	if batchedProgress > 0 {
+		atomic.AddUint64(completedPieces, uint64(batchedProgress))
 	}
 
 	return nil
@@ -266,7 +382,9 @@ func buildInfoDict(path string, name string, pieceLength int64) (*metainfo.Info,
 			}
 			return nil
 		}
-
+		if shouldIgnoreFile(filePath) {
+			return nil
+		}
 		files = append(files, fileEntry{
 			path:   filePath,
 			length: info.Size(),
@@ -359,9 +477,26 @@ func init() {
 	createCmd.Flags().StringVarP(&source, "source", "s", "", "add source string")
 	createCmd.Flags().BoolVarP(&noDate, "no-date", "d", false, "don't write creation date")
 	createCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "be verbose")
+
+	// add new flag for CPU profiling
+	createCmd.Flags().String("cpuprofile", "", "write cpu profile to file")
 }
 
 func runCreate(cmd *cobra.Command, args []string) error {
+	// Start CPU profiling if requested
+	if cpuprofile, _ := cmd.Flags().GetString("cpuprofile"); cpuprofile != "" {
+		f, err := os.Create(cpuprofile)
+		if err != nil {
+			return fmt.Errorf("could not create CPU profile: %w", err)
+		}
+		defer f.Close()
+
+		if err := pprof.StartCPUProfile(f); err != nil {
+			return fmt.Errorf("could not start CPU profile: %w", err)
+		}
+		defer pprof.StopCPUProfile()
+	}
+
 	// validate path exists before proceeding
 	if _, err := os.Stat(args[0]); err != nil {
 		return fmt.Errorf("invalid path %q: %w", args[0], err)
@@ -421,6 +556,9 @@ func runCreate(cmd *cobra.Command, args []string) error {
 			if baseDir == "" {
 				baseDir = filePath
 			}
+			return nil
+		}
+		if shouldIgnoreFile(filePath) {
 			return nil
 		}
 		files = append(files, fileEntry{
