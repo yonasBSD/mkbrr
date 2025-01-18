@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/s0up4200/mkbrr/cmd"
+	"github.com/autobrr/mkbrr/cmd"
 )
 
 // Version information set by build flags

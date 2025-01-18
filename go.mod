@@ -1,4 +1,4 @@
-module github.com/s0up4200/mkbrr
+module github.com/autobrr/mkbrr
 
 go 1.23.4
 
