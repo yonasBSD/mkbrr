@@ -9,22 +9,22 @@
       \/     \/    \/
 ```
 
-mkbrr is a command-line tool to create and inspect torrent files.
+mkbrr is a command-line tool to create and inspect torrent files. Fast, single binary, no dependencies. Written in Go.
 
 ## Performance
 
 mkbrr is blazingly fast, matching or outperforming other popular torrent creation tools. Here are some benchmarks on Apple Silicon:
 
-### Large File (4GB+ MKV)
+### Large File (3.59GB MKV)
 
 ```bash
 # mktorrent
-time mktorrent -p -a https://tracker.com/announce -o "mktorrent.torrent" "movie.mkv"
-Duration: 1.35s user 0.47s system 153% cpu 1.179 total
+time mktorrent -p -a https://tracker.com/announce -o "mktorrent.torrent" "episode.mkv"
+Duration: 1.35s user 0.49s system 103% cpu 1.780 total
 
 # mkbrr
-time mkbrr create movie.mkv -p -v -t https://tracker.com/announce
-Duration: 1.33s user 0.44s system 103% cpu 1.702 total
+time mkbrr create episode.mkv -p -v -t https://tracker.com/announce
+Duration: 1.26s user 0.46s system 97% cpu 1.760 total
 ```
 
 ### Small Directory (350MB Music Album)
@@ -32,11 +32,11 @@ Duration: 1.33s user 0.44s system 103% cpu 1.702 total
 ```bash
 # mktorrent
 time mktorrent -p -a https://tracker.com/announce -o "mktorrent.torrent" "album/"
-Duration: 0.14s user 0.06s system 107% cpu 0.182 total
+Duration: 0.13s user 0.06s system 98% cpu 0.201 total
 
 # mkbrr
 time mkbrr create 'album/' -p -v -t https://tracker.com/announce
-Duration: 0.13s user 0.06s system 94% cpu 0.196 total
+Duration: 0.12s user 0.05s system 90% cpu 0.196 total
 ```
 
 ## Installation
