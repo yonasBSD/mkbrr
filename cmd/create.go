@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"math"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -42,9 +43,9 @@ func calculatePieceLength(totalSize int64) uint {
 	// use their formula: 2^(log2(size)/2 + 4)
 	length := int64(1) << uint(exponent/2+4)
 
-	// enforce min (16 KiB) and max (16 MiB) bounds
-	minLength := int64(16 * 1024)        // 16 KiB
-	maxLength := int64(16 * 1024 * 1024) // 16 MiB
+	// use constants instead of magic numbers
+	minLength := int64(1) << 14
+	maxLength := int64(1) << 24
 
 	// find the required exponent for the bounded length
 	boundedLength := min(max(length, minLength), maxLength)
@@ -94,6 +95,25 @@ func init() {
 }
 
 func runCreate(cmd *cobra.Command, args []string) error {
+	// validate path exists before proceeding
+	if _, err := os.Stat(args[0]); err != nil {
+		return fmt.Errorf("invalid path %q: %w", args[0], err)
+	}
+
+	// validate tracker URL if provided
+	if trackerURL != "" {
+		if _, err := url.Parse(trackerURL); err != nil {
+			return fmt.Errorf("invalid tracker URL %q: %w", trackerURL, err)
+		}
+	}
+
+	// validate web seed URLs
+	for _, seed := range webSeeds {
+		if _, err := url.Parse(seed); err != nil {
+			return fmt.Errorf("invalid web seed URL %q: %w", seed, err)
+		}
+	}
+
 	startTime := time.Now()
 	path := args[0]
 
