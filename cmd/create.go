@@ -15,6 +15,7 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/dustin/go-humanize"
+	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
 
@@ -69,6 +70,7 @@ type pieceHasher struct {
 	pieceLen  int64
 	numPieces int
 	files     []fileEntry
+	progress  *progressbar.ProgressBar
 }
 
 type fileEntry struct {
@@ -84,6 +86,31 @@ func (h *pieceHasher) hashPieces(numWorkers int) error {
 
 	// create error channel for workers
 	errors := make(chan error, numWorkers)
+	progressChan := make(chan int, numWorkers)
+
+	// create progress bar
+	h.progress = progressbar.NewOptions(h.numPieces,
+		progressbar.OptionSetDescription("Hashing pieces"),
+		progressbar.OptionSetItsString("piece"),
+		progressbar.OptionSetWidth(15),
+		progressbar.OptionThrottle(65*time.Millisecond),
+		progressbar.OptionShowCount(),
+		progressbar.OptionShowIts(),
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "=",
+			SaucerHead:    ">",
+			SaucerPadding: " ",
+			BarStart:      "[",
+			BarEnd:        "]",
+		}),
+	)
+
+	// start progress updater
+	go func() {
+		for n := range progressChan {
+			h.progress.Add(n)
+		}
+	}()
 
 	// start workers
 	for i := 0; i < numWorkers; i++ {
@@ -94,7 +121,7 @@ func (h *pieceHasher) hashPieces(numWorkers int) error {
 		}
 
 		go func(startPiece, endPiece int) {
-			if err := h.hashPieceRange(startPiece, endPiece); err != nil {
+			if err := h.hashPieceRange(startPiece, endPiece, progressChan); err != nil {
 				errors <- err
 			} else {
 				errors <- nil
@@ -103,19 +130,22 @@ func (h *pieceHasher) hashPieces(numWorkers int) error {
 	}
 
 	// wait for all workers
+	var err error
 	for i := 0; i < numWorkers; i++ {
-		if err := <-errors; err != nil {
-			return err
+		if e := <-errors; e != nil {
+			err = e
 		}
 	}
 
-	return nil
+	close(progressChan)
+	fmt.Println() // new line after progress bar
+	return err
 }
 
 // hashPieceRange hashes a range of pieces with efficient buffering
-func (h *pieceHasher) hashPieceRange(startPiece, endPiece int) error {
+func (h *pieceHasher) hashPieceRange(startPiece, endPiece int, progressChan chan<- int) error {
 	// use a larger buffer for reading
-	const bufferSize = 1 << 20 // 1MB buffer
+	const bufferSize = 2 << 20 // 2MB buffer
 	buf := make([]byte, bufferSize)
 	// pre-allocate hash buffer with exact size
 	hashBuf := make([]byte, 20)
@@ -128,6 +158,7 @@ func (h *pieceHasher) hashPieceRange(startPiece, endPiece int) error {
 		}
 	}()
 
+	completedPieces := 0
 	// process each piece in the range
 	for pieceIndex := startPiece; pieceIndex < endPiece; pieceIndex++ {
 		offset := int64(pieceIndex) * h.pieceLen
@@ -206,6 +237,13 @@ func (h *pieceHasher) hashPieceRange(startPiece, endPiece int) error {
 
 		// reuse hash buffer instead of allocating new one
 		h.pieces[pieceIndex] = hasher.Sum(hashBuf[:0])
+		completedPieces++
+
+		// update progress periodically
+		if completedPieces == 100 || pieceIndex == endPiece-1 {
+			progressChan <- completedPieces
+			completedPieces = 0
+		}
 	}
 
 	return nil
