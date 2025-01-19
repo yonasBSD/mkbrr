@@ -128,12 +128,10 @@ func CreateTorrent(opts CreateTorrentOptions) (*Torrent, error) {
 	pieceLenInt := int64(1) << pieceLength
 	numPieces := (totalSize + pieceLenInt - 1) / pieceLenInt
 
-	hasher := &pieceHasher{
-		pieces:    make([][]byte, numPieces),
-		pieceLen:  pieceLenInt,
-		numPieces: int(numPieces),
-		files:     files,
-	}
+	// Create display instance
+	display := NewDisplay(NewFormatter(opts.Verbose))
+
+	hasher := NewPieceHasher(files, pieceLenInt, int(numPieces), display)
 
 	numWorkers := runtime.NumCPU()
 	if numWorkers > 4 {

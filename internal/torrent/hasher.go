@@ -9,8 +9,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/schollz/progressbar/v3"
 )
 
 type pieceHasher struct {
@@ -18,7 +16,7 @@ type pieceHasher struct {
 	pieceLen   int64
 	numPieces  int
 	files      []fileEntry
-	progress   *progressbar.ProgressBar
+	display    *Display
 	bufferPool *sync.Pool
 	readSize   int
 }
@@ -90,23 +88,15 @@ func (h *pieceHasher) hashPieces(numWorkers int) error {
 	}
 
 	var completedPieces uint64
-	// distribute pieces evenly across workers, rounding up
 	piecesPerWorker := (h.numPieces + numWorkers - 1) / numWorkers
 	errors := make(chan error, numWorkers)
 
-	h.progress = progressbar.NewOptions(h.numPieces,
-		progressbar.OptionSetDescription("Hashing pieces"),
-		progressbar.OptionSetItsString("piece"),
-		progressbar.OptionSetWidth(15),
-		progressbar.OptionThrottle(65*time.Millisecond),
-		progressbar.OptionShowCount(),
-		progressbar.OptionShowIts(),
-	)
+	// create progress bar using display
+	h.display.ShowProgress(h.numPieces)
 
 	// spawn worker goroutines to process piece ranges in parallel
 	var wg sync.WaitGroup
 	for i := 0; i < numWorkers; i++ {
-		// calculate piece range for this worker
 		start := i * piecesPerWorker
 		end := start + piecesPerWorker
 		if end > h.numPieces {
@@ -129,7 +119,7 @@ func (h *pieceHasher) hashPieces(numWorkers int) error {
 			if completed >= uint64(h.numPieces) {
 				break
 			}
-			h.progress.Set(int(completed))
+			h.display.UpdateProgress(int(completed))
 			time.Sleep(200 * time.Millisecond)
 		}
 	}()
@@ -143,7 +133,7 @@ func (h *pieceHasher) hashPieces(numWorkers int) error {
 		}
 	}
 
-	h.progress.Finish()
+	h.display.FinishProgress()
 	return nil
 }
 
@@ -261,4 +251,15 @@ func (h *pieceHasher) hashPieceRange(startPiece, endPiece int, completedPieces *
 	}
 
 	return nil
+}
+
+// NewPieceHasher creates a new pieceHasher instance
+func NewPieceHasher(files []fileEntry, pieceLen int64, numPieces int, display *Display) *pieceHasher {
+	return &pieceHasher{
+		pieces:    make([][]byte, numPieces),
+		pieceLen:  pieceLen,
+		numPieces: numPieces,
+		files:     files,
+		display:   display, // initialize the display field
+	}
 }

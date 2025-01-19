@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/pprof"
+	"strings"
+	"time"
 
 	"github.com/autobrr/mkbrr/internal/torrent"
 	"github.com/spf13/cobra"
@@ -104,6 +106,8 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	out := outputPath
 	if out == "" {
 		out = name + ".torrent"
+	} else if !strings.HasSuffix(out, ".torrent") {
+		out = out + ".torrent"
 	}
 
 	opts := torrent.CreateTorrentOptions{
@@ -120,6 +124,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		Version:        version,
 	}
 
+	start := time.Now()
 	mi, err := torrent.CreateTorrent(opts)
 	if err != nil {
 		return err
@@ -137,15 +142,18 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	info := mi.GetInfo()
-	fmt.Printf("\n\nCreated %s\n", out)
+	display := torrent.NewDisplay(torrent.NewFormatter(verbose))
+	//display.ShowCreatedMessage(out)
 
 	// display torrent information
-	torrent.NewDisplay(torrent.NewFormatter(verbose)).ShowTorrentInfo(mi, info)
+	display.ShowTorrentInfo(mi, info)
 
-	// display file tree for multi-file torrents
-	if len(info.Files) > 0 {
-		torrent.NewDisplay(torrent.NewFormatter(verbose)).ShowFileTree(info)
+	// display file tree for multi-file torrents if verbose
+	if verbose && len(info.Files) > 0 {
+		display.ShowFileTree(info)
 	}
+
+	display.ShowOutputPathWithTime(out, time.Since(start))
 
 	return nil
 }
