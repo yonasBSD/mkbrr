@@ -2,11 +2,11 @@
 
 ```
          __   ___.                 
-  _____ |  | _\_ |________________
- /     \|  |/ /| __\___ \_  __ \
+  _____ |  | _\_ |________________ 
+ /     \|  |/ /| __ \_  __ \_  __ \
 |  Y Y  \    < | \_\ \  | \/|  | \/
-|__|_|  /__|_ \|___  /__|   |__|
-      \/     \/    \/
+|__|_|  /__|_ \|___  /__|   |__|   
+      \/     \/    \/              
 ```
 
 mkbrr is a command-line tool to create and inspect torrent files. Fast, single binary, no dependencies. Written in Go.
