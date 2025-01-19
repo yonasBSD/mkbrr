@@ -6,11 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/pprof"
-	"strings"
-	"time"
 
 	"github.com/autobrr/mkbrr/internal/torrent"
-	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 )
 
@@ -139,85 +136,15 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("error writing torrent file: %w", err)
 	}
 
-	// Always show minimal info
 	info := mi.GetInfo()
 	fmt.Printf("\n\nCreated %s\n", out)
-	fmt.Printf("Size: %s\n", humanize.Bytes(uint64(info.TotalLength())))
-	fmt.Printf("Hash: %s\n", mi.HashInfoBytes().String())
 
-	// Show detailed information only when verbose flag is set
-	if verbose {
-		fmt.Printf("Name: %s\n", info.Name)
-		fmt.Printf("Pieces: %d\n", len(info.Pieces)/20)
-		fmt.Printf("Piece Length: %s\n", humanize.Bytes(uint64(info.PieceLength)))
-		fmt.Printf("Private: %v\n", isPrivate)
+	// display torrent information
+	torrent.NewDisplay(torrent.NewFormatter(verbose)).ShowTorrentInfo(mi, info)
 
-		if trackerURL != "" {
-			fmt.Printf("\nTracker: %s\n", trackerURL)
-		}
-
-		if len(webSeeds) > 0 {
-			fmt.Println("\nWeb Seeds:")
-			for _, seed := range webSeeds {
-				fmt.Printf("  - %s\n", seed)
-			}
-		}
-
-		// display creation info
-		fmt.Printf("\nCreated by: %s\n", mi.CreatedBy)
-		if !noDate {
-			creationTime := time.Unix(mi.CreationDate, 0)
-			fmt.Printf("Created: %s\n", creationTime.Format(time.RFC1123))
-		}
-		if comment != "" {
-			fmt.Printf("Comment: %s\n", comment)
-		}
-
-		// generate and display magnet link
-		magnet, _ := mi.MagnetV2()
-		fmt.Printf("\nMagnet Link: %s\n", magnet)
-
-		// display file information for multi-file torrents
-		if len(info.Files) > 0 {
-			fmt.Printf("\nFiles  %s\n", info.Name)
-
-			// organize files by path components
-			filesByPath := make(map[string][]torrent.FileEntry)
-			for _, f := range info.Files {
-				dir := filepath.Dir(strings.Join(f.Path, string(filepath.Separator)))
-				if dir == "." {
-					dir = ""
-				}
-				filesByPath[dir] = append(filesByPath[dir], torrent.FileEntry{
-					Name: filepath.Base(strings.Join(f.Path, string(filepath.Separator))),
-					Size: f.Length,
-					Path: strings.Join(f.Path, string(filepath.Separator)),
-				})
-			}
-
-			// print files in tree structure
-			prefix := "       " // 7 spaces to align with "Files  "
-			for dir, files := range filesByPath {
-				if dir != "" {
-					fmt.Printf("%s├─%s\n", prefix, dir)
-					for i, file := range files {
-						if i == len(files)-1 {
-							fmt.Printf("%s│  └─%s [%s]\n", prefix, file.Name, humanize.Bytes(uint64(file.Size)))
-						} else {
-							fmt.Printf("%s│  ├─%s [%s]\n", prefix, file.Name, humanize.Bytes(uint64(file.Size)))
-						}
-					}
-				} else {
-					for i, file := range files {
-						if i == len(files)-1 {
-							fmt.Printf("%s└─%s [%s]\n", prefix, file.Name, humanize.Bytes(uint64(file.Size)))
-						} else {
-							fmt.Printf("%s├─%s [%s]\n", prefix, file.Name, humanize.Bytes(uint64(file.Size)))
-						}
-					}
-				}
-			}
-		}
+	// display file tree for multi-file torrents
+	if len(info.Files) > 0 {
+		torrent.NewDisplay(torrent.NewFormatter(verbose)).ShowFileTree(info)
 	}
 
 	return nil
