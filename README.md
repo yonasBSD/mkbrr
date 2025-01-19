@@ -70,6 +70,9 @@ make build
 # Install the binary to $GOPATH/bin
 make install
 
+# Or install system-wide (requires sudo)
+sudo make install    # installs to /usr/local/bin
+
 # Other available commands:
 make test         # Run tests
 make lint         # Run golangci-lint

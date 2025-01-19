@@ -22,11 +22,15 @@ build:
 	@mkdir -p ${BUILD_DIR}
 	$(GO) build ${LDFLAGS} -o ${BUILD_DIR}/${BINARY_NAME}
 
-# install binary in GOPATH
+# install binary in system path
 .PHONY: install
 install:
 	@echo "Installing ${BINARY_NAME}..."
-	$(GO) install ${LDFLAGS}
+	@if [ "$$(id -u)" = "0" ]; then \
+		install -m 755 ${BUILD_DIR}/${BINARY_NAME} /usr/local/bin/; \
+	else \
+		$(GO) install ${LDFLAGS}; \
+	fi
 
 # run tests
 .PHONY: test
