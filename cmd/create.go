@@ -14,7 +14,6 @@ import (
 )
 
 var (
-	// flags for create command
 	trackerURL     string
 	isPrivate      bool
 	comment        string
@@ -102,7 +101,6 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		name = filepath.Base(filepath.Clean(path))
 	}
 
-	// use custom output path or default to name.torrent
 	out := outputPath
 	if out == "" {
 		out = name + ".torrent"
@@ -130,7 +128,6 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// save the torrent file
 	f, err := os.Create(out)
 	if err != nil {
 		return fmt.Errorf("error creating output file: %w", err)
@@ -143,12 +140,9 @@ func runCreate(cmd *cobra.Command, args []string) error {
 
 	info := mi.GetInfo()
 	display := torrent.NewDisplay(torrent.NewFormatter(verbose))
-	//display.ShowCreatedMessage(out)
 
-	// display torrent information
 	display.ShowTorrentInfo(mi, info)
 
-	// display file tree for multi-file torrents if verbose
 	if verbose && len(info.Files) > 0 {
 		display.ShowFileTree(info)
 	}

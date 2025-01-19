@@ -6,7 +6,6 @@ import (
 	"github.com/autobrr/mkbrr/cmd"
 )
 
-// Version information set by build flags
 var (
 	version   = "dev"
 	buildTime = "unknown"

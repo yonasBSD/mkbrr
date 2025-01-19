@@ -33,22 +33,16 @@ var versionCmd = &cobra.Command{
 	},
 }
 
-// SetVersion sets the version information
 func SetVersion(v, bt string) {
 	version = v
 	buildTime = bt
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() error {
-	// disable completion command
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
-	// add version command
 	rootCmd.AddCommand(versionCmd)
 
-	// set custom usage template to control command order
 	rootCmd.SetUsageTemplate(`Usage:
   {{.CommandPath}} [command]
 

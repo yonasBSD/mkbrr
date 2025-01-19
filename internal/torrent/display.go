@@ -13,10 +13,9 @@ import (
 	"github.com/schollz/progressbar/v3"
 )
 
-// Formatter handles formatting of torrent information.
 type Formatter struct {
 	verbose bool
-	colored bool // add support for colored output
+	colored bool
 }
 
 // NewFormatter creates a new Formatter with the given verbosity.
@@ -40,7 +39,7 @@ func (f *Formatter) FormatTorrentInfo(t interface{}, info *metainfo.Info) (strin
 	}
 
 	var buffer bytes.Buffer
-	// use colors for labels
+
 	labelColor := color.New(color.FgCyan).SprintFunc()
 	valueColor := color.New(color.FgWhite).SprintFunc()
 
@@ -157,34 +156,30 @@ func NewDisplay(formatter *Formatter) *Display {
 	return &Display{formatter: formatter}
 }
 
-// ShowTorrentInfo prints the torrent information to the console.
 func (d *Display) ShowTorrentInfo(t interface{}, info *metainfo.Info) {
 	formatted, err := d.formatter.FormatTorrentInfo(t, info)
 	if err != nil {
-		// Handle error appropriately, possibly logging it
+		fmt.Printf("error formatting torrent info: %v\n", err)
 		return
 	}
 	fmt.Print(formatted)
 }
 
-// ShowFileTree prints the torrent's file tree to the console.
 func (d *Display) ShowFileTree(info *metainfo.Info) {
 	formatted, err := d.formatter.FormatFileTree(info)
 	if err != nil {
-		// Handle error appropriately, possibly logging it
+		fmt.Printf("error formatting file tree: %v\n", err)
 		return
 	}
 	fmt.Print(formatted)
 }
 
-// ShowOutputPath prints the torrent file path.
 func (d *Display) ShowOutputPath(path string) {
 	successColor := color.New(color.FgGreen).SprintFunc()
 	valueColor := color.New(color.FgWhite).SprintFunc()
 	fmt.Printf("\n%s %s\n", successColor("Output:"), valueColor(path))
 }
 
-// ShowProgress creates and returns a progress bar for the hashing process.
 func (d *Display) ShowProgress(total int) *progressbar.ProgressBar {
 	fmt.Print("\n")
 	d.progress = progressbar.NewOptions(total,
@@ -207,21 +202,18 @@ func (d *Display) ShowProgress(total int) *progressbar.ProgressBar {
 	return d.progress
 }
 
-// UpdateProgress updates the progress bar with the current count.
 func (d *Display) UpdateProgress(count int) {
 	if d.progress != nil {
 		d.progress.Set(count)
 	}
 }
 
-// FinishProgress completes the progress bar.
 func (d *Display) FinishProgress() {
 	if d.progress != nil {
 		d.progress.Finish()
 	}
 }
 
-// ShowOutputPathWithTime prints the output path and the time taken to process the torrent.
 func (d *Display) ShowOutputPathWithTime(path string, duration time.Duration) {
 	successColor := color.New(color.FgGreen).SprintFunc()
 	valueColor := color.New(color.FgWhite).SprintFunc()

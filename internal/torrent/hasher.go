@@ -253,7 +253,6 @@ func (h *pieceHasher) hashPieceRange(startPiece, endPiece int, completedPieces *
 	return nil
 }
 
-// NewPieceHasher creates a new pieceHasher instance
 func NewPieceHasher(files []fileEntry, pieceLen int64, numPieces int, display *Display) *pieceHasher {
 	return &pieceHasher{
 		pieces:    make([][]byte, numPieces),

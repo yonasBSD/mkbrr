@@ -2,7 +2,7 @@ package torrent
 
 import "strings"
 
-// file patterns to ignore (case insensitive)
+// file patterns to ignore in source directory (case insensitive)
 var ignoredPatterns = []string{
 	".torrent",
 	".ds_store",

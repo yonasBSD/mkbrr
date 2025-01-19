@@ -39,28 +39,15 @@ func calculatePieceLength(totalSize int64) uint {
 	// ensure bounds: 16 KiB (2^14) to 16 MiB (2^24)
 	exp = uint(min(max(int64(exp), 14), 24))
 
-	//if verbose {
-	//	pieceSize := int64(1) << exp
-	//	pieceCount := (totalSize + pieceSize - 1) / pieceSize
-	//	pieceListSize := pieceCount * 20 // SHA-1 hashes are 20 bytes each
-	//
-	//	fmt.Printf("Content size: %s (%d bytes)\n", humanize.Bytes(uint64(totalSize)), totalSize)
-	//	fmt.Printf("Piece length: %s (%d bytes)\n", humanize.Bytes(uint64(pieceSize)), pieceSize)
-	//	fmt.Printf("Piece count: %s\n", humanize.Comma(int64(pieceCount)))
-	//	fmt.Printf("Piece list size: %s (%d bytes)\n", humanize.Bytes(uint64(pieceListSize)), pieceListSize)
-	//}
-
 	return exp
 }
 
-// GetInfo returns the info dictionary from the metainfo struct
 func (t *Torrent) GetInfo() *metainfo.Info {
 	info := &metainfo.Info{}
 	_ = bencode.Unmarshal(t.InfoBytes, info)
 	return info
 }
 
-// CreateTorrent creates a new torrent file with the given options
 func CreateTorrent(opts CreateTorrentOptions) (*Torrent, error) {
 	path := filepath.ToSlash(opts.Path)
 	name := opts.Name
@@ -111,7 +98,6 @@ func CreateTorrent(opts CreateTorrentOptions) (*Torrent, error) {
 	if opts.PieceLengthExp == nil {
 		pieceLength = calculatePieceLength(totalSize)
 	} else {
-		// log the received value for debugging
 		if opts.Verbose {
 			fmt.Printf("Using requested piece length: 2^%d bytes\n", *opts.PieceLengthExp)
 		}
@@ -128,7 +114,6 @@ func CreateTorrent(opts CreateTorrentOptions) (*Torrent, error) {
 	pieceLenInt := int64(1) << pieceLength
 	numPieces := (totalSize + pieceLenInt - 1) / pieceLenInt
 
-	// Create display instance
 	display := NewDisplay(NewFormatter(opts.Verbose))
 
 	hasher := NewPieceHasher(files, pieceLenInt, int(numPieces), display)
