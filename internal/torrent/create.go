@@ -52,6 +52,7 @@ func CreateTorrent(opts CreateTorrentOptions) (*Torrent, error) {
 	path := filepath.ToSlash(opts.Path)
 	name := opts.Name
 	if name == "" {
+		// preserve the folder name even for single-file torrents
 		name = filepath.Base(filepath.Clean(path))
 	}
 
@@ -146,7 +147,25 @@ func CreateTorrent(opts CreateTorrentOptions) (*Torrent, error) {
 	}
 
 	if len(files) == 1 {
-		info.Length = files[0].length
+		// Check if the input path is a directory
+		pathInfo, err := os.Stat(path)
+		if err != nil {
+			return nil, fmt.Errorf("error checking path: %w", err)
+		}
+
+		if pathInfo.IsDir() {
+			// If it's a directory, use the folder structure even for single files
+			info.Files = make([]metainfo.FileInfo, 1)
+			relPath, _ := filepath.Rel(baseDir, files[0].path)
+			pathComponents := strings.Split(relPath, string(filepath.Separator))
+			info.Files[0] = metainfo.FileInfo{
+				Path:   pathComponents,
+				Length: files[0].length,
+			}
+		} else {
+			// If it's a single file directly, use the simple format
+			info.Length = files[0].length
+		}
 	} else {
 		info.Files = make([]metainfo.FileInfo, len(files))
 		for i, f := range files {
