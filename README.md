@@ -13,30 +13,42 @@ mkbrr is a command-line tool to create and inspect torrent files. Fast, single b
 
 ## Performance
 
-mkbrr is blazingly fast, matching, and sometimes outperforming other popular torrent creation tools. Here are some benchmarks on Apple Silicon:
+mkbrr is blazingly fast, matching, and sometimes outperforming other popular torrent creation tools. Here are some benchmarks:
 
-### Large File (3.59GB MKV)
+### 76GB Remux (Single File) [Ryzen 5 3600 / HDD]
 
 ```bash
 # mktorrent
-time mktorrent -p -a https://tracker.com/announce -o "mktorrent.torrent" "episode.mkv"
-Duration: 1.35s user 0.49s system 103% cpu 1.780 total
+time mktorrent -p
+Duration: 98.45s user 41.83s system 51% cpu 4:32.48 total
 
 # mkbrr
-time mkbrr create episode.mkv -p -v -t https://tracker.com/announce
-Duration: 1.25s user 0.44s system 99% cpu 1.697 total
+time mkbrr create -p
+Duration: 74.16s user 36.52s system 56% cpu 3:17.26 total
 ```
 
-### Small Directory (350MB Music Album)
+### 3.6GB Episode (Single File) [Apple Silicon M3 / NVME]
 
 ```bash
 # mktorrent
-time mktorrent -p -a https://tracker.com/announce -o "mktorrent.torrent" "album/"
-Duration: 0.13s user 0.06s system 98% cpu 0.201 total
+time mktorrent -p
+Duration: 1.34s user 0.49s system 103% cpu 1.766 total
 
 # mkbrr
-time mkbrr create 'album/' -p -v -t https://tracker.com/announce
-Duration: 0.13s user 0.04s system 130% cpu 0.129 total
+time mkbrr create -p
+Duration: 1.27s user 0.67s system 122% cpu 1.587 total
+```
+
+### 350MB Music Album (15 Files) [Apple Silicon M3 / NVME]
+
+```bash
+# mktorrent
+time mktorrent -p
+Duration: 0.14s user 0.06s system 96% cpu 0.201 total
+
+# mkbrr
+time mkbrr create -p
+Duration: 0.13s user 0.05s system 94% cpu 0.189 total
 ```
 
 ## Installation
