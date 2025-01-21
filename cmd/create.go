@@ -71,7 +71,6 @@ func init() {
 	}
 
 	createCmd.Flags().StringVarP(&outputPath, "output", "o", "", "set output path (default: <n>.torrent)")
-	createCmd.Flags().StringVarP(&torrentName, "name", "n", "", "set torrent name (default: basename of target)")
 	createCmd.Flags().StringVarP(&source, "source", "s", "", "add source string")
 	createCmd.Flags().BoolVarP(&noDate, "no-date", "d", false, "don't write creation date")
 	createCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "be verbose")
@@ -95,7 +94,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 
 	start := time.Now()
 
-	// Batch mode
+	// batch mode
 	if batchFile != "" {
 		results, err := torrent.ProcessBatch(batchFile, verbose, version)
 		if err != nil {
@@ -107,7 +106,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Single file mode
+	// single file mode
 	if _, err := os.Stat(args[0]); err != nil {
 		return fmt.Errorf("invalid path %q: %w", args[0], err)
 	}
