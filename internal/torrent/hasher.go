@@ -63,13 +63,13 @@ func (h *pieceHasher) optimizeForWorkload() (int, int) {
 		}
 	case avgFileSize < 1<<20:
 		readSize = 256 << 10
-		numWorkers = int(min(int64(8), int64(runtime.NumCPU())))
+		numWorkers = int(minInt64(8, int64(runtime.NumCPU())))
 	case avgFileSize < 10<<20:
 		readSize = 1 << 20
-		numWorkers = int(min(int64(4), int64(runtime.NumCPU())))
+		numWorkers = int(minInt64(4, int64(runtime.NumCPU())))
 	default:
 		readSize = 4 << 20
-		numWorkers = int(min(int64(2), int64(runtime.NumCPU())))
+		numWorkers = int(minInt64(2, int64(runtime.NumCPU())))
 	}
 
 	// ensure we don't create more workers than pieces to process
@@ -277,4 +277,28 @@ func NewPieceHasher(files []fileEntry, pieceLen int64, numPieces int, display Di
 		files:     files,
 		display:   display,
 	}
+}
+
+// minInt returns the smaller of two integers
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// minInt64 returns the smaller of two int64 values
+func minInt64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// maxInt64 returns the larger of two int64 values
+func maxInt64(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
 }
