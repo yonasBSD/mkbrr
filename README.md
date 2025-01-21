@@ -132,7 +132,6 @@ Single mode flags:
 - `-c, --comment <text>`: Add comment
 - `-l, --piece-length <n>`: Set piece length to 2^n bytes (14-24, automatic if not specified)
 - `-o, --output <path>`: Set output path (default: <name>.torrent)
-- `-n, --name <name>`: Set torrent name (default: basename of target)
 - `-s, --source <text>`: Add source string
 - `-d, --no-date`: Don't write creation date
 
@@ -148,7 +147,6 @@ version: 1  # Required, must be 1
 jobs:       # List of torrent creation jobs
   - output: string      # Required: Output path for .torrent file
     path: string        # Required: Path to source file/directory
-    name: string        # Optional: Torrent name (default: basename of path)
     trackers:           # Optional: List of tracker URLs
       - string
     webseeds:           # Optional: List of webseed URLs
