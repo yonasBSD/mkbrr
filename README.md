@@ -152,7 +152,7 @@ default:
   no_date: true
 
 presets:
-  # Empornium preset
+  # opentrackr preset
   emp:
     source: "EMP"
     trackers:
@@ -257,7 +257,7 @@ default:
   no_date: true
 
 presets:
-  # Empornium preset
+  # opentrackr preset
   emp:
     source: "EMP"
     trackers:
