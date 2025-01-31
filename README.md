@@ -153,10 +153,10 @@ default:
 
 presets:
   # opentrackr preset
-  emp:
-    source: "EMP"
+  ptp:
+    source: "PTP"
     trackers:
-      - "https://tracker.opentrackr.org/announce"
+      - "https://please.passthe.tea/announce"
     # piece_length is automatically optimized based on file size
     # piece_length: 20  # manual override if needed (2^n: 14-24)
 
@@ -251,17 +251,17 @@ Example presets.yaml:
 ```yaml
 version: 1
 
-# Defaults that always apply
+# Defaults that always apply unless overridden
 default:
   private: true
   no_date: true
 
 presets:
   # opentrackr preset
-  emp:
-    source: "EMP"
+  ptp:
+    source: "PTP"
     trackers:
-      - "https://tracker.opentrackr.org/announce"
+      - "https://please.passthe.tea/announce"
     # piece_length is automatically optimized based on file size
     # piece_length: 20  # manual override if needed (2^n: 14-24)
 
