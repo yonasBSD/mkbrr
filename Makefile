@@ -30,12 +30,12 @@ build:
 
 # install binary in system path
 .PHONY: install
-install:
+install: build
 	@echo "Installing ${BINARY_NAME}..."
 	@if [ "$$(id -u)" = "0" ]; then \
 		install -m 755 ${BUILD_DIR}/${BINARY_NAME} /usr/local/bin/; \
 	else \
-		$(GO) install ${LDFLAGS}; \
+		install -m 755 ${BUILD_DIR}/${BINARY_NAME} ${GOBIN}/; \
 	fi
 
 # run all tests (excluding large tests)
