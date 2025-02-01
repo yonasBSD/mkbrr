@@ -27,6 +27,7 @@ mkbrr is a command-line tool to create and inspect torrent files. Fast, single b
     - [Preset Configuration Format](#preset-configuration-format)
   - [Inspect a Torrent](#inspect-a-torrent)
   - [Version Information](#version-information)
+  - [Update](#update)
 - [Performance](#performance)
 - [License](#license)
 
@@ -308,6 +309,14 @@ mkbrr version
 ```
 
 Displays the version and build time of mkbrr.
+
+### Update
+
+```bash
+mkbrr update
+```
+
+Self-updates the mkbrr binary if there is a new version available.
 
 ## Performance
 
