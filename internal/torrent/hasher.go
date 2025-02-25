@@ -10,8 +10,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/kylesanderson/ioringfile"
 )
 
 type pieceHasher struct {
@@ -224,7 +222,7 @@ func (h *pieceHasher) hashPieceRange(startPiece, endPiece int, completedPieces *
 			// reuse or create new file reader
 			reader, ok := readers[file.path]
 			if !ok {
-				f, err := ioringfile.OpenFile(file.path, os.O_RDONLY, 0)
+				f, err := os.OpenFile(file.path, os.O_RDONLY, 0)
 				if err != nil {
 					return fmt.Errorf("failed to open file %s: %w", file.path, err)
 				}
