@@ -21,17 +21,18 @@ type Config struct {
 
 // Options represents the options for a single preset
 type Options struct {
-	Trackers       []string `yaml:"trackers"`
-	WebSeeds       []string `yaml:"webseeds"`
-	Private        *bool    `yaml:"private"`
-	PieceLength    uint     `yaml:"piece_length"`
-	MaxPieceLength uint     `yaml:"max_piece_length"`
-	Comment        string   `yaml:"comment"`
-	Source         string   `yaml:"source"`
-	NoDate         *bool    `yaml:"no_date"`
-	NoCreator      *bool    `yaml:"no_creator"`
-	SkipPrefix     *bool    `yaml:"skip_prefix"`
-	Version        string   // used for creator string
+	Trackers        []string `yaml:"trackers"`
+	WebSeeds        []string `yaml:"webseeds"`
+	Private         *bool    `yaml:"private"`
+	PieceLength     uint     `yaml:"piece_length"`
+	MaxPieceLength  uint     `yaml:"max_piece_length"`
+	Comment         string   `yaml:"comment"`
+	Source          string   `yaml:"source"`
+	NoDate          *bool    `yaml:"no_date"`
+	NoCreator       *bool    `yaml:"no_creator"`
+	SkipPrefix      *bool    `yaml:"skip_prefix"`
+	ExcludePatterns []string `yaml:"exclude_patterns"`
+	Version         string   // used for creator string
 }
 
 // FindPresetFile searches for a preset file in known locations
@@ -123,6 +124,9 @@ func (c *Config) GetPreset(name string) (*Options, error) {
 		merged.Source = c.Default.Source
 		merged.PieceLength = c.Default.PieceLength
 		merged.MaxPieceLength = c.Default.MaxPieceLength
+		if len(c.Default.ExcludePatterns) > 0 {
+			merged.ExcludePatterns = c.Default.ExcludePatterns
+		}
 	}
 
 	// override with preset values if they are set
@@ -155,6 +159,9 @@ func (c *Config) GetPreset(name string) (*Options, error) {
 	}
 	if preset.SkipPrefix != nil {
 		merged.SkipPrefix = preset.SkipPrefix
+	}
+	if len(preset.ExcludePatterns) > 0 {
+		merged.ExcludePatterns = preset.ExcludePatterns
 	}
 
 	return &merged, nil
