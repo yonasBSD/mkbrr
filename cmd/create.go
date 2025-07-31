@@ -18,7 +18,7 @@ import (
 type createOptions struct {
 	pieceLengthExp      *uint
 	maxPieceLengthExp   *uint
-	trackerURL          string
+	trackers            []string
 	comment             string
 	outputPath          string
 	outputDir           string
@@ -50,7 +50,7 @@ var createCmd = &cobra.Command{
 	Long: `Create a new torrent file from a file or directory.
 Supports both single file/directory and batch mode using a YAML config file.
 Supports presets for commonly used settings.
-When a tracker URL is provided, the output filename will use the tracker domain (without TLD) as prefix by default (e.g. "example_filename.torrent"). This behavior can be disabled with --skip-prefix.`,
+When a single tracker URL is provided, the output filename will use the tracker domain (without TLD) as prefix by default (e.g. "example_filename.torrent"). This behavior can be disabled with --skip-prefix. When multiple trackers are specified, no prefix is added.`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if len(args) > 1 {
 			return fmt.Errorf("accepts at most one arg")
@@ -79,7 +79,7 @@ func init() {
 
 	createCmd.Flags().StringVarP(&options.presetName, "preset", "P", "", "use preset from config")
 	createCmd.Flags().StringVar(&options.presetFile, "preset-file", "", "preset config file (default ~/.config/mkbrr/presets.yaml)")
-	createCmd.Flags().StringVarP(&options.trackerURL, "tracker", "t", "", "tracker URL")
+	createCmd.Flags().StringArrayVarP(&options.trackers, "tracker", "t", nil, "tracker URLs (can be specified multiple times)")
 	createCmd.Flags().StringArrayVarP(&options.webSeeds, "web-seed", "w", nil, "add web seed URLs")
 	createCmd.Flags().BoolVarP(&options.isPrivate, "private", "p", true, "make torrent private")
 	createCmd.Flags().StringVarP(&options.comment, "comment", "c", "", "add comment")
@@ -168,7 +168,7 @@ func processBatchMode(opts createOptions, version string, startTime time.Time) e
 func buildCreateOptions(cmd *cobra.Command, inputPath string, opts createOptions, version string) (torrent.CreateTorrentOptions, error) {
 	createOpts := torrent.CreateTorrentOptions{
 		Path:                    inputPath,
-		TrackerURL:              opts.trackerURL,
+		TrackerURLs:             opts.trackers,
 		WebSeeds:                opts.webSeeds,
 		IsPrivate:               opts.isPrivate,
 		Comment:                 opts.comment,
@@ -202,7 +202,7 @@ func buildCreateOptions(cmd *cobra.Command, inputPath string, opts createOptions
 		}
 
 		if len(presetOpts.Trackers) > 0 && !cmd.Flags().Changed("tracker") {
-			createOpts.TrackerURL = presetOpts.Trackers[0]
+			createOpts.TrackerURLs = presetOpts.Trackers
 		}
 
 		if len(presetOpts.WebSeeds) > 0 && !cmd.Flags().Changed("web-seed") {
@@ -273,8 +273,8 @@ func buildCreateOptions(cmd *cobra.Command, inputPath string, opts createOptions
 	}
 
 	// Check for tracker's default source only if no source is set by flag or preset
-	if createOpts.Source == "" && !cmd.Flags().Changed("source") {
-		if trackerSource, ok := trackers.GetTrackerDefaultSource(createOpts.TrackerURL); ok {
+	if createOpts.Source == "" && !cmd.Flags().Changed("source") && len(createOpts.TrackerURLs) > 0 {
+		if trackerSource, ok := trackers.GetTrackerDefaultSource(createOpts.TrackerURLs[0]); ok {
 			createOpts.Source = trackerSource
 		}
 	}
