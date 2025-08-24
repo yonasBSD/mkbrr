@@ -7,7 +7,7 @@ type TrackerConfig struct {
 	DefaultSource    string           // default source to use for this tracker
 	URLs             []string         // list of tracker URLs that share this config
 	PieceSizeRanges  []PieceSizeRange // custom piece size ranges for specific content sizes
-	MaxPieceLength   uint             // maximum piece length exponent (2^n)
+	MaxPieceLength   uint             // maximum piece length exponent (2^n). default is 24 (16 MiB) from create.go
 	MaxTorrentSize   uint64           // maximum .torrent file size in bytes (0 means no limit)
 	UseDefaultRanges bool             // whether to use default piece size ranges when content size is outside custom ranges
 }
@@ -25,16 +25,31 @@ var trackerConfigs = []TrackerConfig{
 			"anthelion.me",
 		},
 		MaxTorrentSize: 250 << 10, // 250 KiB torrent file size limit
+		DefaultSource: "ANT",
+	},
+	{
+		URLs: []string{
+			"nebulance.io",
+		},
+		MaxTorrentSize: 1024 << 10, // 1 MiB torrent file size limit
+		DefaultSource: "NBL",
 	},
 	{
 		URLs: []string{
 			"hdbits.org",
-			"beyond-hd.me",
 			"superbits.org",
 			"sptracker.cc",
 		},
 		MaxPieceLength:   24, // max 16 MiB pieces (2^24)
 		UseDefaultRanges: true,
+	},
+	{
+		URLs: []string{
+			"beyond-hd.me",
+		},
+		MaxPieceLength:   24, // max 16 MiB pieces (2^24)
+		UseDefaultRanges: true,
+		DefaultSource:    "BHD",
 	},
 	{
 		URLs: []string{
@@ -53,14 +68,23 @@ var trackerConfigs = []TrackerConfig{
 			{MaxSize: ^uint64(0), PieceExp: 24},  // 16 MiB for > 13.90 GiB
 		},
 		UseDefaultRanges: false,
+		DefaultSource:    "PTP",
 	},
 	{
 		URLs: []string{
-			"empornium.sx",
 			"morethantv.me", // https://mtv/forum/thread/3237?postid=74725#post74725
 		},
 		MaxPieceLength:   23, // max 8 MiB pieces (2^23)
 		UseDefaultRanges: true,
+		DefaultSource:    "MTV",
+	},
+	{
+		URLs: []string{
+			"empornium.sx",
+		},
+		MaxPieceLength:   23, // max 8 MiB pieces (2^23)
+		UseDefaultRanges: true,
+		DefaultSource:    "Emp",
 	},
 	{
 		URLs: []string{
@@ -129,6 +153,7 @@ var trackerConfigs = []TrackerConfig{
 			{MaxSize: ^uint64(0), PieceExp: 27},   // 128 MiB for > 128 GB
 		},
 		UseDefaultRanges: false,
+		DefaultSource:    "seedpool.org",
 	},
 	{
 		URLs: []string{
@@ -179,6 +204,45 @@ var trackerConfigs = []TrackerConfig{
 			{MaxSize: ^uint64(0), PieceExp: 24},  // 16 MiB for > 50 GB
 		},
 		UseDefaultRanges: false,
+	},
+		{
+		URLs: []string{
+			"lst.gg",
+		},
+		MaxPieceLength: 24, // max 16 MiB pieces (2^24)
+		PieceSizeRanges: []PieceSizeRange{ // https://lst/pages/8
+			{MaxSize: 1024 << 20, PieceExp: 20},  // 1 MiB < 1 GB
+			{MaxSize: 4096 << 20, PieceExp: 21},  // 2 MiB for 1-4 GB
+			{MaxSize: 12288 << 20, PieceExp: 22}, // 4 MiB for 4-12 GB
+			{MaxSize: 20480 << 20, PieceExp: 23}, // 8 MiB for 12-20 GB
+			{MaxSize: ^uint64(0), PieceExp: 24},  // 16 MiB for > 20 GB
+		},
+		UseDefaultRanges: false,
+		DefaultSource:    "lst.gg",
+	},
+	{
+		URLs: []string{
+			"aither.cc",
+		},
+		DefaultSource: "Aither",
+	},
+	{
+		URLs: []string{
+			"upload.cx",
+		},
+		DefaultSource: "ULCX",
+	},
+	{
+		URLs: []string{
+			"capybarabr.com",
+		},
+		DefaultSource: "CapybaraBR",
+	},
+	{
+		URLs: []string{
+			"hawke.uno",
+		},
+		DefaultSource: "HUNO",
 	},
 }
 
