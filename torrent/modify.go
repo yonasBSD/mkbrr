@@ -19,6 +19,7 @@ type ModifyOptions struct {
 	MaxPieceLength *uint
 	PresetName     string
 	PresetFile     string
+	Name           string
 	OutputDir      string
 	OutputPattern  string
 	TrackerURLs    []string
@@ -102,6 +103,11 @@ func ModifyTorrent(path string, opts ModifyOptions) (*Result, error) {
 		}
 	}
 
+	originalMetaInfoName := ""
+	if info, err := mi.UnmarshalInfo(); err == nil {
+		originalMetaInfoName = info.Name
+	}
+
 	// apply flag-based overrides:
 	// update tracker if flag provided
 	if len(opts.TrackerURLs) > 0 {
@@ -113,6 +119,20 @@ func ModifyTorrent(path string, opts ModifyOptions) (*Result, error) {
 		mi.AnnounceList = announceList
 		wasModified = true
 		// Note: This overrides any trackers set by a preset
+	}
+
+	// update name if provided via flag
+	if opts.Name != "" {
+		info, err := mi.UnmarshalInfo()
+		if err == nil {
+			if info.Name != opts.Name {
+				info.Name = opts.Name
+				if infoBytes, err := bencode.Marshal(info); err == nil {
+					mi.InfoBytes = infoBytes
+					wasModified = true
+				}
+			}
+		}
 	}
 
 	// update web seeds if provided via flag
@@ -201,8 +221,8 @@ func ModifyTorrent(path string, opts ModifyOptions) (*Result, error) {
 	}
 
 	basePath := path
-	if opts.OutputPattern == "" && metaInfoName != "" {
-		basePath = metaInfoName + ".torrent"
+	if opts.OutputPattern == "" && originalMetaInfoName != "" {
+		basePath = originalMetaInfoName + ".torrent"
 	}
 
 	// determine output directory: command-line flag takes precedence over preset
