@@ -158,7 +158,19 @@ func CreateTorrent(opts CreateOptions) (*Torrent, error) {
 	var baseDir string
 	originalPaths := make(map[string]string) // map resolved path -> original path for metainfo
 
-	err := filepath.Walk(path, func(currentPath string, walkInfo os.FileInfo, walkErr error) error {
+	inputInfo, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("error checking path: %w", err)
+	}
+
+	// Clean the base path for computing relative paths
+	cleanBasePath := filepath.Clean(path)
+	matchBasePath := cleanBasePath
+	if !inputInfo.IsDir() {
+		matchBasePath = filepath.Dir(cleanBasePath)
+	}
+
+	err = filepath.Walk(path, func(currentPath string, walkInfo os.FileInfo, walkErr error) error {
 		if walkErr != nil {
 			// check if the error is due to a broken symlink during walk
 			// if lstat works but stat fails, it's likely a broken link we might handle later
@@ -201,9 +213,31 @@ func CreateTorrent(opts CreateOptions) (*Torrent, error) {
 			resolvedInfo = statInfo
 		}
 
+		// Compute relative path from torrent root for glob matching
+		relPath, err := filepath.Rel(matchBasePath, currentPath)
+		if err != nil {
+			return fmt.Errorf("error calculating relative path for %q: %w", currentPath, err)
+		}
+		// Handle the root directory case
+		if relPath == "." {
+			relPath = ""
+		}
+
 		if resolvedInfo.IsDir() {
+			// Check hardcoded directory ignores (safety net)
 			if shouldIgnoreDir(currentPath) || shouldIgnoreDir(resolvedPath) {
 				return filepath.SkipDir
+			}
+
+			// Check user-defined exclude/include patterns for directories
+			if relPath != "" {
+				shouldSkip, err := shouldIgnoreEntry(relPath, true, opts.ExcludePatterns, opts.IncludePatterns)
+				if err != nil {
+					return fmt.Errorf("error processing directory patterns for %q: %w", currentPath, err)
+				}
+				if shouldSkip {
+					return filepath.SkipDir
+				}
 			}
 
 			if baseDir == "" && currentPath == path { // only set baseDir for the initial path if it's a dir
@@ -213,7 +247,7 @@ func CreateTorrent(opts CreateOptions) (*Torrent, error) {
 		}
 
 		// it's a file (or a link pointing to one)
-		shouldIgnore, err := shouldIgnoreFile(currentPath, opts.ExcludePatterns, opts.IncludePatterns) // ignore based on original path
+		shouldIgnore, err := shouldIgnoreEntry(relPath, false, opts.ExcludePatterns, opts.IncludePatterns)
 		if err != nil {
 			return fmt.Errorf("error processing file patterns for %q: %w", currentPath, err)
 		}
