@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Layout } from '@/components/layout/Layout';
 import { CreatePage } from '@/pages/Create';
@@ -7,8 +8,52 @@ import { ModifyPage } from '@/pages/Modify';
 import { SettingsPage } from '@/pages/Settings';
 import { Toaster } from '@/components/ui/sonner';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { WindowGetSize, WindowSetSize } from '../wailsjs/runtime/runtime';
+
+const WINDOW_SIZE_KEY = 'mkbrr-window-size';
+// Mirror MinWidth/MinHeight in gui/main.go — keep these in sync.
+const MIN_WIDTH = 900;
+const MIN_HEIGHT = 600;
 
 function App() {
+  // Restore saved window size on startup, and persist it whenever the window is resized.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(WINDOW_SIZE_KEY);
+      if (saved) {
+        const { w, h } = JSON.parse(saved);
+        if (Number.isFinite(w) && Number.isFinite(h) && w >= MIN_WIDTH && h >= MIN_HEIGHT) {
+          // Clamp to the available screen so a size saved on a larger display
+          // can't restore the window oversized or off-screen.
+          const maxW = window.screen.availWidth || w;
+          const maxH = window.screen.availHeight || h;
+          WindowSetSize(Math.min(w, maxW), Math.min(h, maxH));
+        }
+      }
+    } catch {
+      // Ignore malformed data or unavailable storage.
+    }
+
+    let saveTimer: ReturnType<typeof setTimeout>;
+    const handleResize = () => {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(async () => {
+        try {
+          const size = await WindowGetSize();
+          localStorage.setItem(WINDOW_SIZE_KEY, JSON.stringify(size));
+        } catch {
+          // Ignore – non-critical.
+        }
+      }, 300);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(saveTimer);
+    };
+  }, []);
+
   return (
     <ErrorBoundary>
       <BrowserRouter>

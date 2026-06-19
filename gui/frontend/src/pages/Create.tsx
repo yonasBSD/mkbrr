@@ -15,6 +15,8 @@ import { FolderOpen, File, Plus, X, Loader2, ChevronDown, Sparkles, FileSearch, 
 import { SelectPath, SelectFile, CreateTorrent, ListPresets, GetPreset, GetTrackerInfo, GetContentSize, GetRecommendedPieceSize, InspectTorrent } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 import { getEffectiveWorkers } from './Settings';
+import { useFileDrop } from '@/hooks/useFileDrop';
+import { DropOverlay } from '@/components/ui/drop-overlay';
 
 import { main, preset as presetTypes } from '../../wailsjs/go/models';
 
@@ -163,6 +165,12 @@ export function CreatePage() {
   const [contentSize, setContentSize] = useState<number>(0);
   const [recommendedPieceSize, setRecommendedPieceSize] = useState<number>(0);
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  // Drag-and-drop: accept any file or folder and use it as the source path.
+  const { isDragging } = useFileDrop((paths) => {
+    setPath(paths[0]);
+    toast.success('Path set from dropped item');
+  });
 
   useEffect(() => {
     ListPresets().then((names) => setPresets(names ?? [])).catch((e) => toast.error('Failed to load presets: ' + String(e)));
@@ -479,6 +487,7 @@ export function CreatePage() {
 
   return (
     <div className="flex flex-col h-full">
+      <DropOverlay visible={isDragging} label="Drop a file or folder to set the source path" />
       <div className="flex-1 overflow-auto p-6 space-y-4">
         <div>
           <h1 className="text-2xl font-semibold">Create Torrent</h1>
@@ -492,12 +501,25 @@ export function CreatePage() {
             <div className="space-y-1.5">
               <Label>Source Path</Label>
               <div className="flex gap-2">
-                <Input
-                  value={path}
-                  onChange={(e) => setPath(e.target.value)}
-                  placeholder="/path/to/file/or/folder"
-                  className="flex-1"
-                />
+                <div className="relative flex-1">
+                  <Input
+                    value={path}
+                    onChange={(e) => setPath(e.target.value)}
+                    placeholder="/path/to/file/or/folder"
+                    className={path ? 'pr-8' : ''}
+                  />
+                  {path && (
+                    <button
+                      type="button"
+                      onClick={() => { setPath(''); setResult(null); setError(''); }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label="Clear"
+                      title="Clear"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button variant="outline" size="icon" onClick={handleSelectFile}>
@@ -581,12 +603,25 @@ export function CreatePage() {
             <div className="space-y-1.5">
               <Label>Output Directory</Label>
               <div className="flex gap-2">
-                <Input
-                  value={outputDir}
-                  onChange={(e) => setOutputDir(e.target.value)}
-                  placeholder="Same as source"
-                  className="flex-1"
-                />
+                <div className="relative flex-1">
+                  <Input
+                    value={outputDir}
+                    onChange={(e) => setOutputDir(e.target.value)}
+                    placeholder="Same as source"
+                    className={outputDir ? 'pr-8' : ''}
+                  />
+                  {outputDir && (
+                    <button
+                      type="button"
+                      onClick={() => setOutputDir('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label="Clear"
+                      title="Clear"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
                 <Button variant="outline" size="icon" onClick={handleSelectOutputDir}>
                   <FolderOpen className="h-4 w-4" />
                 </Button>

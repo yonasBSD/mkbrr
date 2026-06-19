@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { FolderOpen, File, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { FolderOpen, File, Loader2, CheckCircle, XCircle, X } from 'lucide-react';
 import { SelectTorrentFile, SelectPath, SelectFile, VerifyTorrent } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 import { main } from '../../wailsjs/go/models';
+import { useFileDrop } from '@/hooks/useFileDrop';
+import { DropOverlay } from '@/components/ui/drop-overlay';
 
 type VerifyRequest = main.VerifyRequest;
 type VerifyResult = main.VerifyResult;
@@ -69,6 +72,18 @@ export function CheckPage() {
   const [progress, setProgress] = useState<ProgressEvent | null>(null);
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [error, setError] = useState('');
+
+  // Drag-and-drop: .torrent → torrent field; everything else → content field.
+  const { isDragging } = useFileDrop((paths) => {
+    const dropped = paths[0];
+    if (dropped.toLowerCase().endsWith('.torrent')) {
+      setTorrentPath(dropped);
+      toast.success('Torrent file set');
+    } else {
+      setContentPath(dropped);
+      toast.success('Content path set');
+    }
+  });
 
   // Save form state to localStorage whenever values change
   useEffect(() => {
@@ -154,6 +169,7 @@ export function CheckPage() {
 
   return (
     <div className="flex flex-col h-full">
+      <DropOverlay visible={isDragging} label="Drop a .torrent or content file/folder" />
       <div className="flex-1 overflow-auto p-6 space-y-4">
         <div>
           <h1 className="text-2xl font-semibold">Check Torrent</h1>
@@ -167,13 +183,26 @@ export function CheckPage() {
             <div className="space-y-1.5">
               <Label>Torrent File</Label>
               <div className="flex gap-2">
-                <Input
-                  value={torrentPath}
-                  onChange={(e) => setTorrentPath(e.target.value)}
-                  placeholder="Select a .torrent file"
-                  className="flex-1"
-                />
-                <Button variant="outline" onClick={handleSelectTorrent}>
+                <div className="relative flex-1">
+                  <Input
+                    value={torrentPath}
+                    onChange={(e) => setTorrentPath(e.target.value)}
+                    placeholder="Select a .torrent file"
+                    className={torrentPath ? 'pr-8' : ''}
+                  />
+                  {torrentPath && (
+                    <button
+                      type="button"
+                      onClick={() => { setTorrentPath(''); setResult(null); setError(''); }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label="Clear"
+                      title="Clear"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                <Button variant="outline" size="icon" onClick={handleSelectTorrent}>
                   <FolderOpen className="h-4 w-4" />
                 </Button>
               </div>
@@ -183,12 +212,25 @@ export function CheckPage() {
             <div className="space-y-1.5">
               <Label>Content Path</Label>
               <div className="flex gap-2">
-                <Input
-                  value={contentPath}
-                  onChange={(e) => setContentPath(e.target.value)}
-                  placeholder="Select the content folder or file"
-                  className="flex-1"
-                />
+                <div className="relative flex-1">
+                  <Input
+                    value={contentPath}
+                    onChange={(e) => setContentPath(e.target.value)}
+                    placeholder="Select the content folder or file"
+                    className={contentPath ? 'pr-8' : ''}
+                  />
+                  {contentPath && (
+                    <button
+                      type="button"
+                      onClick={() => { setContentPath(''); setResult(null); setError(''); }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label="Clear"
+                      title="Clear"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button variant="outline" size="icon" onClick={handleSelectContentFile}>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -9,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { FolderOpen, Plus, X, Loader2, ChevronDown, FileSearch } from 'lucide-react';
 import { SelectTorrentFile, SelectPath, ModifyTorrent, ListPresets, GetPreset, InspectTorrent } from '../../wailsjs/go/main/App';
+import { useFileDrop } from '@/hooks/useFileDrop';
+import { DropOverlay } from '@/components/ui/drop-overlay';
 
 import { main, preset as presetTypes } from '../../wailsjs/go/models';
 
@@ -85,6 +88,17 @@ export function ModifyPage() {
   const [result, setResult] = useState<ModifyResult | null>(null);
   const [error, setError] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // Drag-and-drop: accept .torrent files and populate the input field.
+  const { isDragging } = useFileDrop((paths) => {
+    const dropped = paths[0];
+    if (!dropped.toLowerCase().endsWith('.torrent')) {
+      toast.error('Please drop a .torrent file');
+      return;
+    }
+    setTorrentPath(dropped);
+    toast.success('Torrent file set');
+  });
 
   // Load presets on mount
   useEffect(() => {
@@ -242,6 +256,7 @@ export function ModifyPage() {
 
   return (
     <div className="flex flex-col h-full">
+      <DropOverlay visible={isDragging} label="Drop a .torrent file to modify it" />
       <div className="flex-1 overflow-auto p-6 space-y-4">
         <div>
           <h1 className="text-2xl font-semibold">Modify Torrent</h1>
@@ -257,13 +272,26 @@ export function ModifyPage() {
             <div className="space-y-1.5">
               <Label>Input Torrent</Label>
               <div className="flex gap-2">
-                <Input
-                  value={torrentPath}
-                  onChange={(e) => setTorrentPath(e.target.value)}
-                  placeholder="Select a .torrent file"
-                  className="flex-1"
-                />
-                <Button variant="outline" onClick={handleSelectInput}>
+                <div className="relative flex-1">
+                  <Input
+                    value={torrentPath}
+                    onChange={(e) => setTorrentPath(e.target.value)}
+                    placeholder="Select a .torrent file"
+                    className={torrentPath ? 'pr-8' : ''}
+                  />
+                  {torrentPath && (
+                    <button
+                      type="button"
+                      onClick={() => { setTorrentPath(''); setResult(null); setError(''); }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label="Clear"
+                      title="Clear"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                <Button variant="outline" size="icon" onClick={handleSelectInput}>
                   <FolderOpen className="h-4 w-4" />
                 </Button>
               </div>
@@ -358,12 +386,25 @@ export function ModifyPage() {
             <div className="space-y-1.5">
               <Label>Output Directory</Label>
               <div className="flex gap-2">
-                <Input
-                  value={outputDir}
-                  onChange={(e) => setOutputDir(e.target.value)}
-                  placeholder={getDirectory(torrentPath) || 'Same as input file'}
-                  className="flex-1"
-                />
+                <div className="relative flex-1">
+                  <Input
+                    value={outputDir}
+                    onChange={(e) => setOutputDir(e.target.value)}
+                    placeholder={getDirectory(torrentPath) || 'Same as input file'}
+                    className={outputDir ? 'pr-8' : ''}
+                  />
+                  {outputDir && (
+                    <button
+                      type="button"
+                      onClick={() => setOutputDir('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label="Clear"
+                      title="Clear"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
                 <Button variant="outline" size="icon" onClick={handleSelectOutputDir}>
                   <FolderOpen className="h-4 w-4" />
                 </Button>
